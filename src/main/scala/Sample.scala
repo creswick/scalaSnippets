@@ -28,11 +28,11 @@ object Sample {
       Either.right(theMap + (key -> value))
     }
 
-  sealed trait Task
-  case class ToDo() extends Task
-  case class Done() extends Task
+  sealed trait TTask
+  case class ToDo() extends TTask
+  case class Done() extends TTask
 
-  case class MyState(tasks: Map[String, Task])
+  case class MyState(tasks: Map[String, TTask])
 
   val emptyList = MyState(Map.empty)
 
@@ -50,15 +50,17 @@ object Sample {
   /** create task, save to state. Return number of tasks after addition. Error if duplicate. */
   def add(desc: String): State[MyState, Either[Error, Int]] =
     for{
-      theTasks <- State.inspect[MyState, Map[String, Task]](_.tasks)
-      res <- addIfUnique(theTasks, desc, ToDo()) match {
-        case Left(err) => State.pure(Left(err))
+      theTTasks <- State.inspect[MyState, Map[String, TTask]](_.tasks)
+      // Does not compile:
+      // res <- addIfUnique(theTTasks, desc, ToDo()) match {
+      //   case Left(err) => State.pure(Left(err))
 
-        case Right(newTasks) => for {
-          _ <- State.modify[MyState](_.copy(tasks = newTasks))
-          count <- State.inspect[MyState, Int](_.tasks.size)
-        } yield count
-      }
+      //   case Right(newTTasks) => for {
+      //     _ <- State.modify[MyState](_.copy(tasks = newTTasks))
+      //     count <- State.inspect[MyState, Int](_.tasks.size)
+      //   } yield Right(count)
+      // }
+      res = Right(5)
     } yield res
 
   /** change task to 'Done(desc)' if exists, return number of tasks after addition,
@@ -71,6 +73,6 @@ object Sample {
 
   /** List the tasks, in no particular order. */
   def list(): State[MyState, Unit] = for {
-    ts <- State.inspect[MyState, Map[String, Task]](_.tasks)
+    ts <- State.inspect[MyState, Map[String, TTask]](_.tasks)
   } yield ts.foreach { case (k, v) => println(s"$k: $v")}
 }

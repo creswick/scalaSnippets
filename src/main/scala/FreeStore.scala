@@ -1,7 +1,7 @@
 import cats.free.Free
 import cats.free.Free.liftF
 import cats.data.State
-
+import cats._
 import cats.arrow.FunctionK
 import cats.{Id, ~>}
 import scala.collection.mutable
@@ -12,7 +12,7 @@ object FreeStore {
 
   sealed trait KVStoreA[A]
   case class Put[T](key: String, value: T) extends KVStoreA[Unit]
-  case class Get[T](key: String) extends KVStoreA[Option[T]]
+  case class Get[T](key: String) extends KVStoreA[Either[String, T]]
   case class Delete(key: String) extends KVStoreA[Unit]
 
   // Put returns nothing (i.e. Unit).
@@ -20,8 +20,8 @@ object FreeStore {
     liftF[KVStoreA, Unit](Put[T](key, value))
 
   // Get returns a T value.
-  def get[T](key: String): KVStore[Option[T]] =
-    liftF[KVStoreA, Option[T]](Get[T](key))
+  def get[T](key: String): KVStore[Either[String,T]] =
+    liftF[KVStoreA, Either[String, T]](Get[T](key))
 
   // Delete returns nothing (i.e. Unit).
   def delete(key: String): KVStore[Unit] =
@@ -34,12 +34,12 @@ object FreeStore {
       _ <- vMaybe.map(v => put[T](key, f(v))).getOrElse(Free.pure(()))
     } yield ()
 
-  def program: KVStore[Option[Int]] =
+  def program: KVStore[Either[String, Int]] =
     for {
       _ <- put("wild-cats", 2)
       _ <- update[Int]("wild-cats", (_ + 12))
       _ <- put("tame-cats", 5)
-      n <- get[Int]("wild-cats")
+      n <- get[Int]("wil-cats") // note typo
       _ <- delete("tame-cats")
     } yield n
 
@@ -59,7 +59,11 @@ object FreeStore {
             ()
           case Get(key) =>
             println(s"get($key)")
-            kvs.get(key).map(_.asInstanceOf[A])
+            (kvs.get(key) match {
+              case None => Left(s"$key did not exist.")
+              case Some(res) => Right(res)
+            }).asInstanceOf[A]
+              //map(_.asInstanceOf[A])
           case Delete(key) =>
             println(s"delete($key)")
             kvs.remove(key)
@@ -74,11 +78,15 @@ object FreeStore {
       fa match {
         case Put(key, value) => State.modify(_.updated(key, value))
         case Get(key) =>
-          State.inspect(_.get(key).map(_.asInstanceOf[A]))
+          State.inspect(kvs => (kvs.get(key) match {
+              case None => Left(s"$key did not exist.")
+              case Some(res) => Right(res)
+            }).asInstanceOf[A]
+          )
         case Delete(key) => State.modify(_ - key)
       }
   }
 
-  val result: (Map[String, Any], Option[Int]) = program.foldMap(pureCompiler).run(Map.empty).value
+  val result: (Map[String, Any], Either[String, Int]) = program.foldMap(pureCompiler).run(Map.empty).value
 
 }
